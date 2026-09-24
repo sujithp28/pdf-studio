@@ -1,0 +1,61 @@
+{
+  "name": "pdf-studio",
+  "version": "1.0.0",
+  "description": "PDF Studio — View, annotate, and edit PDF files on your desktop",
+  "main": "main.js",
+  "author": "PDF Studio",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist-win": "electron-builder --win --publish never",
+    "dist-mac": "electron-builder --mac --publish never",
+    "dist-linux": "electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^3.11.174",
+    "pdf-lib": "^1.17.1"
+  },
+  "build": {
+    "publish": null,
+    "appId": "com.pdfstudio.desktop",
+    "productName": "PDF Studio",
+    "copyright": "Copyright © 2024 PDF Studio",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "assets/**",
+      "node_modules/pdfjs-dist/build/**",
+      "node_modules/pdf-lib/dist/**"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "icon": "assets/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
