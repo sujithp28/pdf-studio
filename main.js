@@ -1,9 +1,19 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeTheme } = require('electron');
 const path = require('path');
 const fs   = require('fs');
+const { pathToFileURL } = require('url');
 
 let mainWindow;
 let currentFilePath = null;
+// Path the user picked in the Save dialog; the renderer can only write here, once.
+let approvedSavePath = null;
+
+const INDEX_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
+
+// Only accept IPC from our own page (Electron security checklist: validate the sender)
+function fromApp(event) {
+  return !!mainWindow && event.sender === mainWindow.webContents && event.senderFrame?.url === INDEX_URL;
+}
 
 // ── Window ────────────────────────────────────────────────────────────────────
 function createWindow() {
@@ -20,7 +30,9 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       webSecurity: true,
+      devTools: !app.isPackaged,
     },
   });
 
@@ -67,26 +79,38 @@ async function showSaveDialog() {
   const defaultName = currentFilePath
     ? path.basename(currentFilePath, '.pdf') + '-annotated.pdf'
     : 'annotated.pdf';
+  approvedSavePath = null;
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Save Annotated PDF',
     defaultPath: defaultName,
     filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
   });
-  if (!result.canceled && result.filePath)
-    mainWindow.webContents.send('do-save', result.filePath);
+  if (!result.canceled && result.filePath) {
+    approvedSavePath = result.filePath;
+    mainWindow.webContents.send('do-save');
+  }
 }
 
 // ── IPC: renderer asks for dialogs ───────────────────────────────────────────
-ipcMain.on('request-open', () => showOpenDialog());
+ipcMain.on('request-open', (event) => { if (fromApp(event)) showOpenDialog(); });
 
 // Open file passed as CLI argument (e.g. double-clicking a PDF) once the UI can receive it
-ipcMain.on('renderer-ready', () => {
+ipcMain.on('renderer-ready', (event) => {
+  if (!fromApp(event)) return;
   const arg = process.argv.slice(1).find(a => a.toLowerCase().endsWith('.pdf'));
   if (arg && fs.existsSync(arg)) openFilePath(arg);
 });
-ipcMain.on('request-save', () => showSaveDialog());
+ipcMain.on('request-save', (event) => { if (fromApp(event)) showSaveDialog(); });
 
-ipcMain.on('write-pdf', (event, { filePath, data }) => {
+ipcMain.on('write-pdf', (event, data) => {
+  const filePath = approvedSavePath;
+  approvedSavePath = null;
+  if (!fromApp(event) || !filePath) return;
+  // Only PDF bytes: must be binary and start with the "%PDF-" header
+  if (!(data instanceof Uint8Array) || data.length < 5 || Buffer.from(data.subarray(0, 5)).toString('latin1') !== '%PDF-') {
+    dialog.showErrorBox('Save Failed', 'The document could not be exported as a valid PDF.');
+    return;
+  }
   try {
     fs.writeFileSync(filePath, Buffer.from(data));
     dialog.showMessageBox(mainWindow, {
@@ -102,7 +126,7 @@ ipcMain.on('write-pdf', (event, { filePath, data }) => {
 });
 
 ipcMain.on('set-title', (event, title) => {
-  if (mainWindow) mainWindow.setTitle(title + ' — PDF Studio');
+  if (fromApp(event) && typeof title === 'string') mainWindow.setTitle(title + ' — PDF Studio');
 });
 
 // ── App menu ──────────────────────────────────────────────────────────────────
@@ -139,9 +163,8 @@ function buildMenu() {
     {
       label: 'View',
       submenu: [
-        { role: 'reload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
+        // Reload / DevTools only in development builds
+        ...(app.isPackaged ? [] : [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }]),
         { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
         { type: 'separator' },
         { role: 'togglefullscreen' },
@@ -170,6 +193,14 @@ function buildMenu() {
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+// ── Web contents hardening: no new windows, no navigation away from the app ──
+app.on('web-contents-created', (_event, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-navigate', (event, url) => {
+    if (url !== INDEX_URL) event.preventDefault();
+  });
+});
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {

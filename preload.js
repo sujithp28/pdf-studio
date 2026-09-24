@@ -14,8 +14,8 @@ contextBridge.exposeInMainWorld('pdfStudio', {
   // Ask main process to show the native Save dialog
   requestSave: () => ipcRenderer.send('request-save'),
 
-  // Write annotated PDF bytes to a path chosen by main process
-  writePDF: (filePath, data) => ipcRenderer.send('write-pdf', { filePath, data }),
+  // Write annotated PDF bytes; main process writes only to the path the user picked in the Save dialog
+  writePDF: (data) => ipcRenderer.send('write-pdf', data),
 
   // Update window title
   setTitle: (title) => ipcRenderer.send('set-title', title),
@@ -28,8 +28,8 @@ contextBridge.exposeInMainWorld('pdfStudio', {
     ipcRenderer.on('open-file', (_event, payload) => cb(payload));
   },
 
-  // Receive the save-path chosen by the native dialog
+  // Main process asks for the PDF bytes after the user confirmed the Save dialog
   onDoSave: (cb) => {
-    ipcRenderer.on('do-save', (_event, filePath) => cb(filePath));
+    ipcRenderer.on('do-save', () => cb());
   },
 });
