@@ -12,30 +12,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - run: npm install
+      - run: npm install --ignore-optional
       - run: npm run dist-win
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
           name: "PDF Studio v1.0.0"
           files: dist/*.exe
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-mac:
     runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - run: npm install
+      - run: npm install --ignore-optional
       - run: npm run dist-mac
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
           name: "PDF Studio v1.0.0"
           files: dist/*.dmg
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -46,12 +50,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - run: npm install
+      - run: npm install --ignore-optional
       - run: npm run dist-linux
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
           name: "PDF Studio v1.0.0"
           files: dist/*.AppImage
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
