@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - run: npm install --ignore-optional
+      - run: npm install --omit=optional
       - run: npm run dist-win
       - uses: softprops/action-gh-release@v2
         with:
@@ -20,6 +20,7 @@ jobs:
           name: "PDF Studio v1.0.0"
           files: dist/*.exe
           fail_on_unmatched_files: false
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -32,7 +33,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - run: npm install --ignore-optional
+      - run: npm install --omit=optional
       - run: npm run dist-mac
       - uses: softprops/action-gh-release@v2
         with:
@@ -50,7 +51,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - run: npm install --ignore-optional
+      - run: npm install --omit=optional
       - run: npm run dist-linux
       - uses: softprops/action-gh-release@v2
         with:
