@@ -2,7 +2,7 @@ name: Build Installer
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'security/**']
   workflow_dispatch:
 
 jobs:
@@ -82,7 +82,8 @@ jobs:
   release:
     needs: [build-windows, build-mac, build-linux]
     runs-on: ubuntu-latest
-    if: always()
+    # Publish only from master; security/** branches (push or manual dispatch) build but never release
+    if: always() && github.ref == 'refs/heads/master'
     permissions:
       contents: write
     steps:
