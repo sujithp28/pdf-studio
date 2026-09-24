@@ -3,14 +3,10 @@
  * No raw Node/Electron APIs are exposed; only the functions the UI needs.
  */
 const { contextBridge, ipcRenderer } = require('electron');
-const path = require('path');
 
 contextBridge.exposeInMainWorld('pdfStudio', {
   // Let renderer know it is running inside Electron
   isElectron: true,
-
-  // Resolve a path relative to the app root (used for local PDF.js files)
-  appPath: (rel) => path.join(__dirname, rel),
 
   // Ask main process to show the native Open dialog
   requestOpen: () => ipcRenderer.send('request-open'),
@@ -23,6 +19,9 @@ contextBridge.exposeInMainWorld('pdfStudio', {
 
   // Update window title
   setTitle: (title) => ipcRenderer.send('set-title', title),
+
+  // Tell main process the UI listeners are registered
+  ready: () => ipcRenderer.send('renderer-ready'),
 
   // Receive a file that was opened from the menu / Finder / CLI
   onOpenFile: (cb) => {

@@ -532,6 +532,7 @@ function initApp() {
       loadBytes(bytes, payload.name, payload.size);
     });
     window.pdfStudio.onDoSave(filePath => exportPDF(filePath));
+    window.pdfStudio.ready();
   }
 
   async function loadFileObj(file) {

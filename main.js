@@ -28,9 +28,6 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    // Open file passed as CLI argument (e.g. double-clicking a PDF)
-    const arg = process.argv.find(a => a.endsWith('.pdf'));
-    if (arg && fs.existsSync(arg)) openFilePath(arg);
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -81,6 +78,12 @@ async function showSaveDialog() {
 
 // ── IPC: renderer asks for dialogs ───────────────────────────────────────────
 ipcMain.on('request-open', () => showOpenDialog());
+
+// Open file passed as CLI argument (e.g. double-clicking a PDF) once the UI can receive it
+ipcMain.on('renderer-ready', () => {
+  const arg = process.argv.slice(1).find(a => a.toLowerCase().endsWith('.pdf'));
+  if (arg && fs.existsSync(arg)) openFilePath(arg);
+});
 ipcMain.on('request-save', () => showSaveDialog());
 
 ipcMain.on('write-pdf', (event, { filePath, data }) => {
