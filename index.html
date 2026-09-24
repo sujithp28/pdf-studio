@@ -98,7 +98,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 /* ── Main ── */
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
 .cvwrap{flex:1;overflow:auto;background:var(--bg);
-  display:flex;align-items:flex-start;justify-content:center;padding:20px}
+  display:flex;align-items:flex-start;justify-content:safe center;padding:20px}
 .cvbox{position:relative;box-shadow:var(--shadow-lg);line-height:0;flex-shrink:0}
 #pc{display:block}
 #ac{position:absolute;top:0;left:0}
@@ -182,6 +182,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .spinner{width:26px;height:26px;border:3px solid var(--bdr);
   border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+[hidden]{display:none!important}
 
 /* ── Text annotation ── */
 .ta{position:absolute;background:rgba(255,255,248,.92);border:1.5px solid var(--accent);
@@ -500,6 +501,9 @@ function initApp() {
     const tag = e.target.tagName;
     if (tag==='INPUT'||tag==='TEXTAREA') return;
     const k = e.key.toLowerCase();
+    if ((e.ctrlKey||e.metaKey)&&k==='o') { e.preventDefault(); openFile(); }
+    if ((e.ctrlKey||e.metaKey)&&k==='s') { e.preventDefault(); saveFile(); }
+    if (e.ctrlKey||e.metaKey||e.altKey) return;
     if (k==='v') setTool('select');
     if (k==='d') setTool('draw');
     if (k==='h') setTool('highlight');
@@ -511,8 +515,6 @@ function initApp() {
     if (k==='+'||k==='=') zoomIn();
     if (k==='-') zoomOut();
     if (k==='w') fitWidth();
-    if ((e.ctrlKey||e.metaKey)&&k==='o') { e.preventDefault(); openFile(); }
-    if ((e.ctrlKey||e.metaKey)&&k==='s') { e.preventDefault(); saveFile(); }
   });
 
   // ── File open ─────────────────────────────────────────────────────────────
@@ -559,6 +561,9 @@ function initApp() {
     $('inf-pages').textContent = S.pages;
     $('inf-size').textContent  = fmtSz(size);
     if (IS_ELECTRON) window.pdfStudio.setTitle(name);
+    // Open fitted to the window width (large drawings would otherwise show only a corner)
+    const vp1 = (await S.doc.getPage(1)).getViewport({scale:1});
+    S.scale = +Math.min(1.5, ($('cvwrap').clientWidth-48)/vp1.width).toFixed(2);
     await renderPage(1);
     buildThumbs();
     showToast('Loaded — ' + S.pages + (S.pages===1?' page':' pages'));
@@ -579,12 +584,14 @@ function initApp() {
     const vp = pg.getViewport({scale:S.scale});
     S.pageW = Math.round(vp.width);
     S.pageH = Math.round(vp.height);
-    pc.width=S.pageW; pc.height=S.pageH;
+    // Page canvas renders at device resolution so it stays sharp on scaled displays
+    const dpr = window.devicePixelRatio || 1;
+    pc.width=Math.round(vp.width*dpr); pc.height=Math.round(vp.height*dpr);
     ac.width=S.pageW; ac.height=S.pageH;
     pc.style.width=S.pageW+'px'; pc.style.height=S.pageH+'px';
     ac.style.width=S.pageW+'px'; ac.style.height=S.pageH+'px';
-    ctx.clearRect(0,0,S.pageW,S.pageH);
-    await pg.render({canvasContext:ctx, viewport:vp}).promise;
+    actx.setTransform(S.scale,0,0,S.scale,0,0);
+    await pg.render({canvasContext:ctx, viewport:pg.getViewport({scale:S.scale*dpr})}).promise;
     ld.hidden=true;
     drawAnnotations(num);
     updateStatus(); updateThumbActive();
@@ -659,7 +666,7 @@ function initApp() {
   // ── Annotation canvas ─────────────────────────────────────────────────────
   function getPos(e) {
     const r=ac.getBoundingClientRect(), src=e.touches?e.touches[0]:e;
-    return {x:(src.clientX-r.left)*(ac.width/r.width), y:(src.clientY-r.top)*(ac.height/r.height)};
+    return {x:(src.clientX-r.left)/S.scale, y:(src.clientY-r.top)/S.scale};
   }
 
   ac.addEventListener('mousedown',startDraw);
@@ -674,7 +681,8 @@ function initApp() {
     const {x,y}=getPos(e);
     S.drawing=true; S.dragStart={x,y};
     if(S.tool==='draw') S.path=[{x,y}];
-    else if(S.tool==='text'){S.drawing=false; placeText(x,y);}
+    // preventDefault: the mousedown's default focus change would instantly blur (and discard) the new text box
+    else if(S.tool==='text'){e.preventDefault(); S.drawing=false; placeText(x,y);}
   }
 
   function moveDraw(e) {
@@ -682,7 +690,7 @@ function initApp() {
     const {x,y}=getPos(e);
     if(S.tool==='draw'){
       S.path.push({x,y}); redrawLayer();
-      actx.beginPath(); actx.strokeStyle=S.color; actx.lineWidth=S.brush;
+      actx.beginPath(); actx.strokeStyle=S.color; actx.lineWidth=S.brush/S.scale;
       actx.lineCap='round'; actx.lineJoin='round';
       const p=S.path;
       if(p.length>1){actx.moveTo(p[p.length-2].x,p[p.length-2].y); actx.lineTo(p[p.length-1].x,p[p.length-1].y); actx.stroke();}
@@ -690,7 +698,7 @@ function initApp() {
       redrawLayer();
       const {x:x0,y:y0}=S.dragStart, w=x-x0, h=y-y0;
       if(S.tool==='highlight'){actx.globalAlpha=S.opacity/100; actx.fillStyle=S.color; actx.fillRect(x0,y0,w,h); actx.globalAlpha=1;}
-      else{actx.strokeStyle=S.color; actx.lineWidth=S.brush; actx.strokeRect(x0,y0,w,h);}
+      else{actx.strokeStyle=S.color; actx.lineWidth=S.brush/S.scale; actx.strokeRect(x0,y0,w,h);}
     } else if(S.tool==='erase'){
       eraseAt(x,y);
     }
@@ -705,7 +713,7 @@ function initApp() {
     if(!S.annots[S.page]) S.annots[S.page]=[];
     const an=S.annots[S.page];
     if(S.tool==='draw'&&S.path.length>1)
-      an.push({type:'draw',path:[...S.path],color:S.color,size:S.brush});
+      an.push({type:'draw',path:[...S.path],color:S.color,size:S.brush/S.scale});
     else if(S.tool==='highlight'){
       const{x:x0,y:y0}=S.dragStart;
       if(Math.abs(end.x-x0)>3&&Math.abs(end.y-y0)>3)
@@ -713,7 +721,7 @@ function initApp() {
     } else if(S.tool==='shape'){
       const{x:x0,y:y0}=S.dragStart;
       if(Math.abs(end.x-x0)>3&&Math.abs(end.y-y0)>3)
-        an.push({type:'shape',rect:[x0,y0,end.x-x0,end.y-y0],color:S.color,size:S.brush});
+        an.push({type:'shape',rect:[x0,y0,end.x-x0,end.y-y0],color:S.color,size:S.brush/S.scale});
     }
     S.path=[];
     drawAnnotations(S.page);
@@ -722,11 +730,11 @@ function initApp() {
 
   function eraseAt(x,y){
     const an=S.annots[S.page]; if(!an)return;
-    const r=S.brush*8;
+    const r=S.brush*8/S.scale;
     S.annots[S.page]=an.filter(a=>{
       if(a.type==='highlight'||a.type==='shape'){const[rx,ry,rw,rh]=a.rect;return!(x>=rx&&x<=rx+rw&&y>=ry&&y<=ry+rh);}
       if(a.type==='draw') return !a.path.some(p=>Math.hypot(p.x-x,p.y-y)<r);
-      if(a.type==='text') return !(Math.abs(a.x-x)<80&&Math.abs(a.y-y)<24);
+      if(a.type==='text') return !(Math.abs(a.x-x)<80/S.scale&&Math.abs(a.y-y)<24/S.scale);
       return true;
     });
     redrawLayer();
@@ -736,7 +744,7 @@ function initApp() {
     const old=cvbox.querySelector('.ta'); if(old)commitText(old);
     const ta=document.createElement('textarea');
     ta.className='ta';
-    ta.style.left=x+'px'; ta.style.top=y+'px';
+    ta.style.left=x*S.scale+'px'; ta.style.top=y*S.scale+'px';
     ta.style.color=S.color; ta.style.fontSize=(S.brush*3+10)+'px';
     ta.rows=1; cvbox.appendChild(ta); ta.focus();
     ta.oninput=()=>{ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';};
@@ -748,7 +756,7 @@ function initApp() {
     const txt=ta.value.trim();
     if(txt){
       if(!S.annots[S.page])S.annots[S.page]=[];
-      S.annots[S.page].push({type:'text',text:txt,x:parseFloat(ta.style.left),y:parseFloat(ta.style.top),color:S.color,size:S.brush*3+10});
+      S.annots[S.page].push({type:'text',text:txt,x:parseFloat(ta.style.left)/S.scale,y:parseFloat(ta.style.top)/S.scale,color:S.color,size:(S.brush*3+10)/S.scale});
       drawAnnotations(S.page);
       $('inf-an').textContent=S.annots[S.page].length;
     }
@@ -757,12 +765,12 @@ function initApp() {
 
   // ── Draw layer ────────────────────────────────────────────────────────────
   function redrawLayer(){
-    actx.clearRect(0,0,ac.width,ac.height);
+    actx.clearRect(0,0,ac.width/S.scale,ac.height/S.scale);
     (S.annots[S.page]||[]).forEach(a=>drawAnnot(a));
   }
 
   function drawAnnotations(pn){
-    actx.clearRect(0,0,ac.width,ac.height);
+    actx.clearRect(0,0,ac.width/S.scale,ac.height/S.scale);
     (S.annots[pn]||[]).forEach(a=>drawAnnot(a));
   }
 
@@ -829,7 +837,7 @@ function initApp() {
     showToast('Exporting…');
     try{
       const bytes = await buildAnnotatedPDF();
-      window.pdfStudio.writePDF(filePath, Array.from(bytes));
+      window.pdfStudio.writePDF(filePath, bytes);
     }catch(err){showToast('Export failed: '+err.message);}
   }
 
@@ -848,30 +856,27 @@ function initApp() {
   }
 
   async function buildAnnotatedPDF(){
-    const{PDFDocument,rgb,StandardFonts}=PDFLib;
+    const{PDFDocument,rgb,StandardFonts,degrees}=PDFLib;
     const pdfDoc=await PDFDocument.load(S.bytes.buffer);
     const font=await pdfDoc.embedFont(StandardFonts.Helvetica);
     const pages=pdfDoc.getPages();
     for(const[pn,ans]of Object.entries(S.annots)){
       const pg=pages[+pn-1]; if(!pg||!ans.length)continue;
-      const{width,height}=pg.getSize();
-      const sx=width/S.pageW, sy=height/S.pageH;
+      const vp=(await S.doc.getPage(+pn)).getViewport({scale:1});
+      const P=(x,y)=>{const[px,py]=vp.convertToPdfPoint(x,y);return{x:px,y:py};};
+      const box=([rx,ry,rw,rh])=>{const a=P(rx,ry),b=P(rx+rw,ry+rh);
+        return{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(b.x-a.x),height:Math.abs(b.y-a.y)};};
       for(const a of ans){
+        const c=h2r(a.color), color=rgb(c.r,c.g,c.b);
         if(a.type==='highlight'){
-          const[rx,ry,rw,rh]=a.rect;const c=h2r(a.color);
-          pg.drawRectangle({x:rx*sx,y:height-(ry+rh)*sy,width:rw*sx,height:rh*sy,color:rgb(c.r,c.g,c.b),opacity:(a.opacity||40)/100});
+          pg.drawRectangle({...box(a.rect),color,opacity:(a.opacity||40)/100});
         }else if(a.type==='shape'){
-          const[rx,ry,rw,rh]=a.rect;const c=h2r(a.color);
-          pg.drawRectangle({x:rx*sx,y:height-(ry+rh)*sy,width:rw*sx,height:rh*sy,borderColor:rgb(c.r,c.g,c.b),borderWidth:a.size*sx,opacity:0});
+          pg.drawRectangle({...box(a.rect),borderColor:color,borderWidth:a.size,opacity:0});
         }else if(a.type==='text'){
-          const c=h2r(a.color);
-          pg.drawText(a.text,{x:a.x*sx,y:height-(a.y+a.size)*sy,size:Math.max(8,a.size*sx),font,color:rgb(c.r,c.g,c.b)});
+          pg.drawText(a.text,{...P(a.x,a.y+a.size),size:a.size,font,color,rotate:degrees(vp.rotation)});
         }else if(a.type==='draw'){
-          const c=h2r(a.color);
-          for(let i=1;i<a.path.length;i++){
-            const p1=a.path[i-1],p2=a.path[i];
-            pg.drawLine({start:{x:p1.x*sx,y:height-p1.y*sy},end:{x:p2.x*sx,y:height-p2.y*sy},thickness:a.size*sx,color:rgb(c.r,c.g,c.b)});
-          }
+          for(let i=1;i<a.path.length;i++)
+            pg.drawLine({start:P(a.path[i-1].x,a.path[i-1].y),end:P(a.path[i].x,a.path[i].y),thickness:a.size,color});
         }
       }
     }

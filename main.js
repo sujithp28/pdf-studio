@@ -53,7 +53,7 @@ function openFilePath(filePath) {
     mainWindow.webContents.send('open-file', {
       name: path.basename(filePath),
       path: filePath,
-      data: Array.from(buffer),   // send as regular array (serializable)
+      data: buffer,
       size: buffer.length,
     });
   } catch (err) {
