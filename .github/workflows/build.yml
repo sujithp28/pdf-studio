@@ -55,6 +55,8 @@ jobs:
           sips -z 1024 1024 assets/icon.png --out icon.iconset/icon_512x512@2x.png
           iconutil -c icns icon.iconset -o assets/icon.icns
       - run: npm install --omit=optional
+      # dmg-builder needs its optional dep dmg-license, skipped by --omit=optional
+      - run: npm install --no-save --omit=optional dmg-license
       - run: npm run dist-mac
       - uses: actions/upload-artifact@v4
         with:
@@ -81,6 +83,8 @@ jobs:
     needs: [build-windows, build-mac, build-linux]
     runs-on: ubuntu-latest
     if: always()
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
